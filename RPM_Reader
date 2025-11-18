@@ -1,0 +1,51 @@
+// -------------------------------------------------------------
+// PURE RPM Reader for 4-pin PWM fan (Noctua etc.)
+// Fan PWM pin is forced LOW so fan always stays OFF
+// Tach on Pin 2 (INT0)
+// -------------------------------------------------------------
+
+volatile unsigned long tachCount = 0;
+unsigned long lastMillis = 0;
+int rpm = 0;
+
+void tachISR() {
+  tachCount++;  // Count falling edges
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // PWM pin (blue wire) must be held LOW so the fan stays OFF
+  pinMode(9, OUTPUT);
+  digitalWrite(9, LOW);   // Force OFF mode
+
+  // Tach input
+  pinMode(2, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(2), tachISR, FALLING);
+
+  Serial.println("Pure RPM Reader Started (PWM held OFF)");
+}
+
+void loop() {
+  unsigned long now = millis();
+  
+  // Update RPM once per second
+  if (now - lastMillis >= 1000) {
+    lastMillis = now;
+
+    noInterrupts();
+    unsigned long pulses = tachCount;
+    tachCount = 0;
+    interrupts();
+
+    // If too few pulses, assume 0 RPM
+    if (pulses < 2) {
+      rpm = 0;
+    } else {
+      rpm = (pulses / 2) * 60;  // 2 pulses per revolution
+    }
+
+    Serial.print("RPM: ");
+    Serial.println(rpm);
+  }
+}

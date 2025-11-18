@@ -1,0 +1,105 @@
+// -------------------------------------------
+// Noctua PWM Fan Control + RPM Monitoring
+// Board: Arduino Uno / Nano / Pro Mini (ATmega328P)
+// PWM on pin 9  (25 kHz, Timer1)
+// Tach on pin 2 (INT0)
+// -------------------------------------------
+
+volatile unsigned long tachCounter = 0;  // counts tach pulses
+unsigned long lastRPMMillis = 0;        // last time we computed RPM
+unsigned int rpm = 0;                   // latest RPM value
+
+void tachISR() {
+  // Interrupt Service Routine for fan tachometer
+  tachCounter++;
+}
+
+void setupTimer1For25kHzPWM() {
+  // Set up Timer1 for Fast PWM, mode 14, no prescaler
+  // Output on OC1A (pin 9)
+
+  pinMode(9, OUTPUT);
+
+  // Clear control registers
+  TCCR1A = 0;
+  TCCR1B = 0;
+
+  // Fast PWM, mode 14: WGM13:0 = 1110 (14)
+  TCCR1A |= _BV(WGM11);
+  TCCR1B |= _BV(WGM13) | _BV(WGM12);
+
+  // Non-inverting mode on OC1A (COM1A1:0 = 10)
+  TCCR1A |= _BV(COM1A1);
+
+  // No prescaler (clock source = clk/1)
+  TCCR1B |= _BV(CS10);
+
+  // Set TOP value for 25 kHz
+  // f_pwm = 16 MHz / (N * (1 + TOP))
+  // 25 kHz = 16e6 / (1 * (1 + TOP))  => TOP ≈ 639
+  ICR1 = 639;
+
+  // Start with 0% duty
+  OCR1A = 0;
+}
+
+void setFanDuty(float dutyPercent) {
+  // dutyPercent: 0–100
+  dutyPercent = constrain(dutyPercent, 0.0, 100.0);
+
+  uint16_t top = ICR1;
+  uint16_t value = (uint16_t)((dutyPercent / 100.0) * top);
+  OCR1A = value;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Tach input pin
+  pinMode(2, INPUT_PULLUP);  
+  attachInterrupt(digitalPinToInterrupt(2), tachISR, FALLING);
+
+  // Set up 25 kHz PWM on pin 9
+  setupTimer1For25kHzPWM();
+
+  Serial.println("Noctua PWM Fan Controller Initialized (AVR)");
+}
+
+void loop() {
+  static int duty = 0;
+  static int step = 5;  // how fast we change duty
+
+  // Update PWM duty cycle
+  setFanDuty(duty);
+
+  // Compute RPM once per second
+  unsigned long now = millis();
+  if (now - lastRPMMillis >= 1000) {
+    lastRPMMillis = now;
+
+    noInterrupts();
+    unsigned long count = tachCounter;
+    tachCounter = 0;
+    interrupts();
+
+    // Fan gives 2 pulses per revolution
+    rpm = (count / 2) * 60;
+
+    Serial.print("Duty: ");
+    Serial.print(duty);
+    Serial.print("%\tRPM: ");
+    Serial.println(rpm);
+  }
+
+  // Sweep duty 0→100→0 just for testing
+  duty += step;
+  if (duty >= 100) {
+    duty = 100;
+    step = -step;
+  } else if (duty <= 0) {
+    duty = 0;
+    step = -step;
+  }
+
+  delay(200);
+}

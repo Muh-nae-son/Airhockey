@@ -46,6 +46,7 @@ void loop() {
    if (digitalRead(PLAYER1_BEAM_PIN) == HIGH) {
      Serial.println("Game Over! Nice Playing! Come Play Again!");
      systemState = STATE_IDLE;
+     delay(5000);
 
      // Stop fans with ledcWrite
      // Once you're done doing whatever you want in active state and changed the state to what you want, exit out with a return; so the code

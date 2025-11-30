@@ -8,7 +8,7 @@ int systemState = STATE_IDLE;
 const int PENNY_BEAM_PIN = 17;  // LOW = broken, HIGH = unbroken
 
 void setup() {
-  // put your setup code here, to run once:
+  // put the setup code here, youre gonna run this one time:
 Serial.begin(115200);
 
 // Beam sensor

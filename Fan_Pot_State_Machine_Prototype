@@ -1,9 +1,19 @@
 #include <Arduino.h>
+
+// For lcd screen, include library
+// not the same i2c screen on tinkercad, diff library
+#include <LiquidCrystal_I2C.h>
+
+
 // ----- STATES -----
 #define STATE_IDLE   0
 #define STATE_ACTIVE 1
 
 int systemState = STATE_IDLE;
+
+// LCD Display
+// Address, columns, rows available
+LiquidCrystal_I2C lcd1(0x27, 16, 2);
 
 // IR break-beam sensord
 const int PENNY_BEAM_PIN = 17;  // LOW = broken, HIGH = unbroken
@@ -91,6 +101,11 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
+  // LCD display
+  Wire.begin(21, 22);  // ESP32 I2C pins
+  lcd1.init();
+  lcd1.backlight();
+
   // Beam sensor
   pinMode(PENNY_BEAM_PIN, INPUT);
   pinMode(PLAYER1_BEAM_PIN, INPUT);
@@ -148,13 +163,38 @@ void loop() {
     ledcWrite(FAN_PWM_PIN, 255);
 
     // check beam condition
-    Serial.println("Please Insert Penny...");
+    // Serial.println("Please Insert Penny...");
+    lcd1.setCursor(0,0);
+    lcd1.print("Please Insert");
+    lcd1.setCursor(0,1);
+    lcd1.print("Penny...");
+
     if (digitalRead(PENNY_BEAM_PIN) == HIGH) {
       // Beam broken -> enter ACTIVE state
-      Serial.println("Penny Inserted! Starting Game");
+      // Serial.println("Penny Inserted! Starting Game");
+      lcd1.setCursor(0,0);
+      lcd1.print("Penny Inserted!");
+      lcd1.setCursor(0,1);
+      lcd1.print("Starting Game");
       systemState = STATE_ACTIVE;
-      delay(5000);
+      delay(2500);
 
+      // CLear Screen
+      lcd1.setCursor(0,0);
+      lcd1.print("                ");
+      lcd1.setCursor(0,1);
+      lcd1.print("                ");
+    
+
+      lcd1.setCursor(0,0);
+      lcd1.print("Begin Playing!");
+      delay(2500);
+
+      // CLear Screen
+      lcd1.setCursor(0,0);
+      lcd1.print("                ");
+      lcd1.setCursor(0,1);
+      lcd1.print("                ");
       //Can also run any initialization/start of game code here. Like flashing lights or buzzers to say game is starting
       // Once you're done doing whatever you want in active state and changed the state to what you want, exit out with a return; so the code
       // can start from the beginning and pick which activity to do based on state.
@@ -163,13 +203,13 @@ void loop() {
   }
 
   if (systemState == STATE_ACTIVE) {
-    Serial.println("OMG you're playing the game!!!!");
+    //Serial.println("OMG you're playing the game!!!!");
+    
     static uint32_t lastMillis = 0;
     uint32_t now = millis();
 
     // Read the analog input from the potentiometer
     int potValue = analogRead(potPin);
-    
 
     //map and control fans with pot input
     uint8_t duty = map(potValue, 0, 2123, 0, 255);
@@ -248,24 +288,28 @@ void loop() {
       // this math is just to make the serial monitor output feel more intuitive.
       Serial.println(-(duty-255));
     }
-  delay(10);
+   delay(10);
 
   if (digitalRead(PLAYER1_BEAM_PIN) == HIGH) {
-    Serial.println("Game Over! Nice Playing! Come Play Again!");
+    // Serial.println("Game Over! Nice Playing! Come Play Again!");
     systemState = STATE_IDLE;
+    lcd1.setCursor(0,0);
+    lcd1.print("Game Over!");
+    lcd1.setCursor(0,1);
+    lcd1.print("P1 Wins!");
+    delay(2500);
 
     // Stop fans with ledcWrite
     // Something to do with fan open collector, fan turns on when pulled to ground
     // So fan actually turns off when pwm signal is high
     ledcWrite(FAN_PWM_PIN, 255);
-    delay(5000);
+    delay(2500);
 
 
     // Once you're done doing whatever you want in active state and changed the state to what you want, exit out with a return; so the code
     // can start from the beginning and pick which activity to do based on state.
     return;
   }
-
  }
 
   

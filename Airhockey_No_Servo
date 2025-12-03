@@ -1,0 +1,184 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// PWM Output
+const int FAN_PWM_PIN = 16;
+const int FAN_PWM_CHANNEL = 0;
+const int FAN_PWM_FREQ = 25000;   // 25 kHz
+const int FAN_PWM_RESOLUTION = 8; // 0–255
+
+// Tach pins
+const int FAN1_TACH_PIN = 32;
+const int FAN2_TACH_PIN = 33;
+const int FAN3_TACH_PIN = 25;
+const int FAN4_TACH_PIN = 26;
+const int FAN5_TACH_PIN = 27;
+const int FAN6_TACH_PIN = 34;
+const int FAN7_TACH_PIN = 35;
+const int FAN8_TACH_PIN = 39;
+
+
+// Tach counters (must be volatile, updated in ISR)
+volatile uint32_t fan1_pulses = 0;
+volatile uint32_t fan2_pulses = 0;
+volatile uint32_t fan3_pulses = 0;
+volatile uint32_t fan4_pulses = 0;
+volatile uint32_t fan5_pulses = 0;
+volatile uint32_t fan6_pulses = 0;
+volatile uint32_t fan7_pulses = 0;
+volatile uint32_t fan8_pulses = 0;
+
+// Last computed RPM
+int fan1_rpm = 0;
+int fan2_rpm = 0;
+int fan3_rpm = 0;
+int fan4_rpm = 0;
+int fan5_rpm = 0;
+int fan6_rpm = 0;
+int fan7_rpm = 0;
+int fan8_rpm = 0;
+
+// Interrupt service routines
+void IRAM_ATTR fan1_tach_isr() {
+  fan1_pulses++;
+}
+
+void IRAM_ATTR fan2_tach_isr() {
+  fan2_pulses++;
+}
+
+void IRAM_ATTR fan3_tach_isr() {
+  fan3_pulses++;
+}
+
+void IRAM_ATTR fan4_tach_isr() {
+  fan4_pulses++;
+}
+
+void IRAM_ATTR fan5_tach_isr() {
+  fan5_pulses++;
+}
+
+void IRAM_ATTR fan6_tach_isr() {
+  fan6_pulses++;
+}
+
+void IRAM_ATTR fan7_tach_isr() {
+  fan7_pulses++;
+}
+
+void IRAM_ATTR fan8_tach_isr() {
+  fan8_pulses++;
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  // ----- PWM setup on ESP32 -----
+   ledcAttachChannel(FAN_PWM_PIN, FAN_PWM_FREQ, FAN_PWM_RESOLUTION, FAN_PWM_CHANNEL);
+
+  // Start with, say, 50% duty.
+  // 0–255 duty cycle
+  // Max RPM should be 1800-2000
+  uint8_t duty = 127; 
+  ledcWrite(FAN_PWM_PIN, duty);
+
+  // ----- Tach input pins -----
+  pinMode(FAN1_TACH_PIN, INPUT);
+  pinMode(FAN2_TACH_PIN, INPUT);
+  pinMode(FAN3_TACH_PIN, INPUT);
+  pinMode(FAN4_TACH_PIN, INPUT);
+  pinMode(FAN5_TACH_PIN, INPUT);
+  pinMode(FAN6_TACH_PIN, INPUT);
+  pinMode(FAN7_TACH_PIN, INPUT);
+  pinMode(FAN8_TACH_PIN, INPUT);
+
+//interrupt syntax(pin,function to be executed when interrupt occurs, falling high to low triggers interrupt given some logic level)
+  attachInterrupt(digitalPinToInterrupt(FAN1_TACH_PIN), fan1_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN2_TACH_PIN), fan2_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN3_TACH_PIN), fan3_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN4_TACH_PIN), fan4_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN5_TACH_PIN), fan5_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN6_TACH_PIN), fan6_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN7_TACH_PIN), fan7_tach_isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(FAN8_TACH_PIN), fan8_tach_isr, FALLING);
+
+  Serial.println("ESP32 Fan Controller (8-fan RPM example) started");
+}
+
+void loop() {
+  static uint32_t lastMillis = 0;
+  uint32_t now = millis();
+
+  // Compute RPM once per second
+  if (now - lastMillis >= 1000) {
+    lastMillis = now;
+
+    // Safely copy and reset pulse counts
+    noInterrupts();
+    uint32_t pulses1 = fan1_pulses;
+    uint32_t pulses2 = fan2_pulses;
+    uint32_t pulses3 = fan3_pulses;
+    uint32_t pulses4 = fan4_pulses;
+    uint32_t pulses5 = fan5_pulses;
+    uint32_t pulses6 = fan6_pulses;
+    uint32_t pulses7 = fan7_pulses;
+    uint32_t pulses8 = fan8_pulses;
+    fan1_pulses = 0;
+    fan2_pulses = 0;
+    fan3_pulses = 0;
+    fan4_pulses = 0;
+    fan5_pulses = 0;
+    fan6_pulses = 0;
+    fan7_pulses = 0;
+    fan8_pulses = 0;
+    interrupts();
+
+    // Each revolution Halle sensor sends 2 pulses (actually more like drops low instead of goes high)
+    // After 1000 milliseconds, X pulses occur, meaning X/2 revolutions occurred in 1 second
+    if (pulses1 < 2) fan1_rpm = 0;
+    else fan1_rpm = (pulses1 / 2) * 60;
+
+    if (pulses2 < 2) fan2_rpm = 0;
+    else fan2_rpm = (pulses2 / 2) * 60;
+
+    if (pulses3 < 2) fan3_rpm = 0;
+    else fan3_rpm = (pulses3 / 2) * 60;
+
+    if (pulses4 < 2) fan4_rpm = 0;
+    else fan4_rpm = (pulses4 / 2) * 60;
+
+    if (pulses5 < 2) fan5_rpm = 0;
+    else fan5_rpm = (pulses5 / 2) * 60;
+
+    if (pulses6 < 2) fan6_rpm = 0;
+    else fan6_rpm = (pulses6 / 2) * 60;
+
+    if (pulses7 < 2) fan7_rpm = 0;
+    else fan7_rpm = (pulses7 / 2) * 60;
+
+    if (pulses8 < 2) fan8_rpm = 0;
+    else fan8_rpm = (pulses8 / 2) * 60;
+
+    // Print
+    Serial.print("Fan1 RPM: ");
+    Serial.print(fan1_rpm);
+    Serial.print("   Fan2 RPM: ");
+    Serial.print(fan2_rpm);
+    Serial.print("   Fan3 RPM: ");
+    Serial.print(fan3_rpm);
+    Serial.print("   Fan4 RPM: ");
+    Serial.print(fan4_rpm);
+    Serial.print("   Fan5 RPM: ");
+    Serial.print(fan5_rpm);
+    Serial.print("   Fan6 RPM: ");
+    Serial.print(fan6_rpm);
+    Serial.print("   Fan7 RPM: ");
+    Serial.print(fan7_rpm);
+    Serial.print("   Fan8 RPM: ");
+    Serial.println(fan8_rpm);
+  }
+
+}

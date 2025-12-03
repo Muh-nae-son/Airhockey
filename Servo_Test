@@ -1,0 +1,21 @@
+#include <ESP32Servo.h>
+
+Servo s;
+
+void setup() {
+  s.attach(23);
+}
+
+void loop() {
+  for (int pos = 0; pos <= 180; pos += 1) {
+    s.write(pos);
+    delay(15);
+  }
+  delay(500);
+
+  for (int pos = 180; pos >= 0; pos -= 1) {
+    s.write(pos);
+    delay(15);
+  }
+  delay(500);
+}
